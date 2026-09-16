@@ -1,0 +1,34 @@
+# Security model
+
+## Roles and ownership
+
+| Role | Authority |
+| --- | --- |
+| ADMIN | Operations, account roles/status, forced password changes, audit and protected metrics |
+| OPERATOR | Catalog, warehouses, inventory, fleet, orders, shipment operations, analytics and alerts |
+| DRIVER | Own linked driver profile and assigned orders/shipments; delivery-leg transitions and position reports |
+| CUSTOMER | Own orders, tracking, addresses and analytics; pre-dispatch cancellation and return requests |
+
+Registration always creates CUSTOMER accounts. Operators cannot manage users. Self-admin role/status changes are rejected to prevent accidental lockout through that endpoint. Linked driver users must retain the DRIVER role. All reads and writes are authorized in the backend; sidebar visibility is only a usability feature.
+
+## Credentials and tokens
+
+- Passwords are BCrypt hashed with cost 12. Request limits are 12–72 characters for newly set passwords; BCrypt also enforces its byte limit.
+- JWTs are HMAC-SHA256 signed with an environment-supplied key, issuer checked and expiration validated.
+- Every authenticated request checks active status, revocation version and current role in PostgreSQL.
+- Refresh/reset tokens contain secure random bytes. Only their SHA-256 digests are stored. Refresh tokens rotate; reset tokens expire after 20 minutes and are single-use.
+- Password changes, account changes and logout revoke sessions. Forced reset restricts the account to profile/password/logout operations.
+- SMTP reset links place the token in the URL fragment, avoiding normal HTTP access-log query strings. The frontend submits it to the reset endpoint.
+- The frontend stores tokens only in memory. It does not persist them in localStorage or sessionStorage. A browser reload signs out.
+
+## Request protection
+
+Spring Security provides secure response headers and blocks unauthorized routes. CORS allows the configured exact origin; bearer-token APIs do not use cookie authentication, so CSRF is disabled. Rate limits are 30 auth requests and 600 other API requests per minute per source address per app instance. The limiter is bounded and does not trust arbitrary forwarded-IP headers.
+
+Input records validate lengths, numeric ranges and enum values. Geographic points additionally reject nonfinite values. SQL values are parameter-bound and the only dynamic order clause is allowlisted. API projections never include password hashes. Audit records contain IDs/actions only, not credentials, JWTs or request bodies.
+
+## Operational requirements
+
+Use TLS at the reverse proxy in production. Provide unique secrets through the runtime or AWS Secrets Manager. Restrict database privileges and network exposure. Configure a shared rate limiter and trusted proxy address handling for multiple replicas. Review public Swagger exposure before an internet-facing deployment. SMTP must use authenticated TLS where appropriate.
+
+No penetration test or third-party security audit is claimed. This repository does not implement MFA, email verification, fine-grained tenant separation, anti-abuse email quotas or a production secrets-rotation system.
