@@ -7,8 +7,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 @org.springframework.test.annotation.DirtiesContext
 class BackendApplicationTests extends PostgresTestDatabase {
 
-	@Test
-	void contextLoads() {
-	}
-
+  @Test
+  void contextLoads() {}
 }
