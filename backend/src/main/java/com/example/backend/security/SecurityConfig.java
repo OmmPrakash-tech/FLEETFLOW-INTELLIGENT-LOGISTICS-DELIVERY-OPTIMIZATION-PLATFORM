@@ -61,7 +61,9 @@ public class SecurityConfig {
         .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
     http.authorizeHttpRequests(
         a ->
-            a.requestMatchers(
+            a.dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR)
+                .permitAll()
+                .requestMatchers(
                     "/api/auth/login",
                     "/api/auth/register",
                     "/api/auth/refresh",
