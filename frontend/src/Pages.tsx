@@ -1,3 +1,4 @@
+import MultiStopPlan from "./MultiStopPlan";
 import {
   lazy,
   Suspense,
@@ -1686,6 +1687,7 @@ export function RoutePlanner() {
         title="Routes & estimates"
         description="Explainable route estimates for every assigned shipment."
       />
+      <MultiStopPlan />
       {q.isPending || q.error ? (
         <Loading error={q.error} />
       ) : !route ? (

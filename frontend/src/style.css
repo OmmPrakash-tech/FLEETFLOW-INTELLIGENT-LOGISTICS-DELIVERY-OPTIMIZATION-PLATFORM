@@ -1136,7 +1136,7 @@ select:focus {
   background: #eff4ea;
   position: relative;
 }
-.route-map svg {
+.route-map > svg {
   display: block;
   width: 100%;
   height: auto;
@@ -1627,7 +1627,7 @@ select:focus {
     font-size: 7px;
     padding: 10px;
   }
-  .route-map svg {
+  .route-map > svg {
     min-height: 230px;
   }
   .tracking-selector {
@@ -1716,4 +1716,26 @@ select:focus {
 }
 .order-lines h3 {
   margin-top: 5px;
+}
+
+.route-planning-panel {
+  padding: 24px;
+  margin-bottom: 24px;
+}
+.route-planning-panel p {
+  color: #68746b;
+  line-height: 1.6;
+}
+.route-planning-panel label {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+}
+.route-planning-panel input,
+.route-planning-panel textarea {
+  padding: 12px;
+  border: 1px solid #dce6dd;
+  border-radius: 8px;
+  width: 100%;
+  font: inherit;
 }
