@@ -35,3 +35,7 @@ Creation reserves stock. Delivery deducts quantity and releases the reservation 
 `.env` is ignored. `.env.example` contains placeholders. Native local PostgreSQL and container PostgreSQL use separate data stores. Test classes create disposable schemas with an `ff_test_` UUID prefix inside the configured database and drop only that exact schema. CI supplies a PostgreSQL service, avoiding reliance on a particular developer's machine contents.
 
 Run backups and restore drills before production use. No automatic production rollback or destructive down migration is supplied. Retention policies for audit/event/idempotency rows are a future operational requirement; deduplication records are currently retained indefinitely.
+
+## Additive migration V3
+
+`V3__lookup_indexes.sql` adds indexes for auth-token user revocation, address ownership, driver/status shipment lookup, order warehouse references and product foreign-key lookups. Earlier migrations are unchanged. These indexes match actual filters and foreign keys; no measured throughput improvement is claimed. Clean-schema migration is exercised by every database integration test class and by the isolated Compose database.

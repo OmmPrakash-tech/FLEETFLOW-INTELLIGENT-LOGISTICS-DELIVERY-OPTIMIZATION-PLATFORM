@@ -32,7 +32,7 @@ R = min(driver_to_warehouse_km / 35 / sla_hours, 1)
 score = 0.60 D + 0.15 C + 0.25 R (priority / 3)
 ```
 
-The smallest score wins; ties use driver UUID. Larger spare capacity is penalized slightly to conserve larger vehicles. Selection is O(D) over eligible drivers. Row locks and a rechecked zero-workload constraint protect assignments. No batching or multi-shipment driver loading is supported.
+The smallest score wins; ties use driver UUID. Larger spare capacity is penalized slightly to conserve larger vehicles. Ranking is O(D log D) over eligible drivers, followed by up to D candidate recheck queries under contention. Row locks and a rechecked zero-workload constraint protect assignments. No batching or multi-shipment driver loading is supported.
 
 ## Weighted graph shortest path
 
@@ -55,3 +55,9 @@ Initial shipment planning uses 25 km/h for bikes and 35 km/h for other vehicles,
 ## Cache
 
 Redis stores Haversine values keyed by a versioned hash of the coordinate pair, TTL one hour. Invalid cached values or Redis exceptions trigger local computation and a 30-second cache bypass. Stock and assignment decisions never read Redis.
+
+## September 2026 validation improvements
+
+The entire submitted graph is validated before shortest-path search, including disconnected components and start=end queries. Null/blank nodes, null edges, unknown endpoints, negative/non-finite weights and accumulated distance overflow are rejected. ETA arithmetic uses floating-point stop overhead and rejects values outside its integer-minute range. Invalid non-finite scoring inputs cannot become feasible candidates.
+
+Nearest-neighbor plans remain deterministic by original stop index for ties; duplicate coordinates are separate visits and each adds five handling minutes. The API accepts 1–50 stops; the pure algorithm also supports an empty list. The console can calculate these plans using the live endpoint. Plans are open paths, are not persisted, and do not automatically assign orders. Dijkstra solves the supplied nonnegative graph; the multi-stop heuristic does not promise a globally optimal travelling-salesperson solution. Assignment supports one active shipment per driver, not a batched vehicle-routing solver.

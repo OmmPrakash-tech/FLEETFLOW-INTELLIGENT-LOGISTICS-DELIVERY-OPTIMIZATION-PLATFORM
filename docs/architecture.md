@@ -35,3 +35,21 @@ REST snapshots and authenticated SSE return the same authorized shipment project
 ## Scaling boundary
 
 Database transactions are safe across multiple app instances. The current warehouse allocator conservatively locks all candidate warehouses; the driver allocator may temporarily reject work when candidates are locked by another assignment. These choices favor correctness over throughput. SSE connection limits and the local rate limiter must be revisited before horizontal scale.
+
+## Component diagram
+
+```mermaid
+flowchart TD
+  Browser[React browser console] --> Proxy[Nginx in Docker / Vite in development]
+  Proxy --> Boundary[Request IDs, body limits, rate limiting]
+  Boundary --> Security[JWT and live account authorization]
+  Security --> API[Spring REST and SSE controllers]
+  API --> Services[Catalog, orders, tracking and account services]
+  Services --> Algorithms[Haversine, scoring, Dijkstra, nearest neighbor]
+  Services --> PostgreSQL[(PostgreSQL: transactions, Flyway, outbox)]
+  Services --> Cache[Distance cache with outage fallback]
+  Cache --> Redis[(Optional Redis)]
+  Services --> SMTP[Optional SMTP reset delivery]
+```
+
+No separate fleet/tenant entity, machine-learning service or road/traffic provider exists.

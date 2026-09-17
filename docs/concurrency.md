@@ -8,9 +8,9 @@ Quantity and reserved stock have database CHECK constraints. All stock adjustmen
 
 ## Assignments
 
-Assignment locks the order, then eligible driver and vehicle rows using `FOR UPDATE ... SKIP LOCKED`. Driver workload is constrained to 0–1; status and vehicle capacity are checked before assignment. Shipment order ID is unique. Driver/vehicle status updates and shipment/route creation commit together.
+Assignment locks the order, ranks eligible drivers, then locks and rechecks one candidate driver/vehicle pair at a time using `FOR UPDATE ... SKIP LOCKED`. Driver workload is constrained to 0–1; status and vehicle capacity are checked before assignment. Shipment order ID is unique. Driver/vehicle status updates and shipment/route creation commit together.
 
-SKIP LOCKED may return no eligible driver while another assignment temporarily holds locks, even when some drivers will become available afterward. The caller receives a retryable 409, never an unsafe assignment. The allocator currently locks the returned eligible set; a future high-throughput implementation should lock candidates individually while preserving lock order.
+SKIP LOCKED may return no eligible driver while another assignment temporarily holds locks, even when some drivers will become available afterward. The caller receives a retryable 409, never an unsafe assignment. Unselected candidates remain unlocked. A regression test holds the first assignment uncommitted and verifies a second order can use a spare driver. Candidate scores are a point-in-time heuristic; feasibility is rechecked under lock.
 
 ## Lifecycle and position reports
 

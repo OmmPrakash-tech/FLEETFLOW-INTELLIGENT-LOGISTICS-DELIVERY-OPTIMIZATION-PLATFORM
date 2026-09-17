@@ -164,7 +164,7 @@ Coverage includes state transition rules, scoring, shortest paths, ETA, inventor
 
 Warehouse selection excludes unavailable/full warehouses and requires all requested items to be available at one warehouse. A normalized score combines distance, utilization, priority and SLA risk. Driver selection requires an available driver and vehicle, zero workload and sufficient weight capacity. Scoring is an explainable heuristic, **not machine learning**.
 
-Orders, reservations, load changes, audit entries, events and retry records commit together. Allocations lock candidate warehouse rows in UUID order, then inventory rows in product order. Assignment locks the order and eligible fleet rows. Database constraints provide an additional layer of protection. See [algorithms](docs/algorithms.md) and [concurrency](docs/concurrency.md).
+Orders, reservations, load changes, audit entries, events and retry records commit together. Allocations lock candidate warehouse rows in UUID order, then inventory rows in product order. Assignment locks the order, ranks eligible drivers, then locks and rechecks one candidate driver/vehicle pair at a time. Database constraints provide an additional layer of protection. See [algorithms](docs/algorithms.md) and [concurrency](docs/concurrency.md).
 
 ## Engineering documentation
 
@@ -186,8 +186,16 @@ Orders, reservations, load changes, audit entries, events and retry records comm
 - SSE polls persisted state every three seconds, sends only changes, and reconnects at one minute. It is bounded to 64 connections per instance; it is not a broker-backed high-volume tracking service.
 - Redis caches distances only. API rate limits are per application instance and source address; multi-replica production needs trusted proxy configuration and a shared limiter.
 - The UI keeps tokens in memory, so a full page reload requires signing in again. Refresh tokens rotate during the active session.
-- SMTP delivery requires an external service. Real email delivery and container runtime checks depend on infrastructure availability.
+- SMTP delivery requires an external service. Real email delivery remains unverified; local container builds/startup have been verified.
 - Analytics use recorded data without synthetic history. Fresh seeds therefore show a single day of activity.
 - No AWS deployment, Kubernetes, forecasting, traffic-aware ETA, Prometheus/Grafana or OpenTelemetry deployment is included.
 
 Priorities after the core workflow: richer catalog editing, scalable warehouse candidate pruning, road-network integration, reliable external notifications, shared rate limits, Testcontainers when Docker is available, and measured load testing.
+
+## Contributing and project status
+
+See [CONTRIBUTING](CONTRIBUTING.md), [security reporting](SECURITY.md), [community conduct](CODE_OF_CONDUCT.md) and [CHANGELOG](CHANGELOG.md). The implemented capabilities are listed above; executed checks and unverified infrastructure are separated in [verification](docs/verification.md). Road-network routing, batch vehicle routing and ML remain roadmap items, not implemented or experimental services.
+
+The route screen now supports live nearest-neighbor planning for up to 50 stops. Request errors include a correlation ID, API bodies are bounded to 256 KiB, and an additive migration indexes ownership, token revocation and shipment-driver lookups. CI includes container builds and real browser workflows in addition to backend/PostgreSQL tests and frontend compilation.
+
+Suggested repository description: “Intelligent fleet and delivery optimization platform for managing vehicles, drivers, deliveries, routes, and constraint-aware logistics operations.” Suggested topics: `fleet-management`, `logistics`, `route-optimization`, `delivery-optimization`, `spring-boot`, `java`, `postgresql`, `docker`, `rest-api`, `optimization`. Metadata has not been changed remotely.

@@ -66,7 +66,7 @@ Next operations: PICKING → PACKED → assign → DISPATCHED → IN_TRANSIT →
 
 ## Errors
 
-Service/controller errors include timestamp, HTTP status, code, message and request path. Security-filter errors contain status, code and message. No stack traces or SQL details are exposed. Typical statuses: 400 invalid input, 401 missing/invalid/revoked auth, 403 forbidden or forced password change, 404 missing record, 409 business conflict, 429 rate limit, 503 database/email/tracking capacity failure.
+Service/controller and security/rate-limit errors share timestamp, HTTP status, code, message, request path and requestId. The generated X-Request-ID response header matches the error body. API bodies over 262,144 bytes return 413 before JSON parsing, including chunked requests. No stack traces or SQL details are exposed. Typical statuses: 400 invalid input, 401 missing/invalid/revoked auth, 403 forbidden or forced password change, 404 missing record, 409 business conflict, 429 rate limit, 503 database/email/tracking capacity failure.
 
 ## SSE
 

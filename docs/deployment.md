@@ -35,7 +35,7 @@ No cloud resources have been created. Externalize database/cache locations and o
 
 ## CI
 
-GitHub Actions defines backend verification against a temporary PostgreSQL 18 service and a frontend production build. CI credentials are public, ephemeral test-only values with no relationship to local or deployed credentials. Local browser tests are separate and require seeded data and Chrome. No successful remote workflow result is claimed until actually observed.
+GitHub Actions defines backend verification against a temporary PostgreSQL 18 service, a frontend production build, and a separate Docker/Chromium job that validates Compose, builds and starts the stack, waits for database readiness, and runs real browser tests. CI credentials are public, ephemeral test-only values with no relationship to local or deployed credentials. Local browser tests require seeded data and Chrome; BASE_URL can point to an isolated verification stack. CI installs Chromium. The new CI job has not run remotely because this upgrade has not been pushed. Equivalent local container builds/startup and browser checks passed.
 
 ## Formatting
 
