@@ -20,6 +20,7 @@ class LogisticsIntegrationTests extends PostgresTestDatabase {
   @Autowired CatalogService catalog;
   @Autowired OrderService orders;
   @Autowired AuthService auth;
+  @Autowired org.springframework.transaction.PlatformTransactionManager transactionManager;
   Actor admin, customer;
   UUID product, warehouse;
 
@@ -74,6 +75,103 @@ class LogisticsIntegrationTests extends PostgresTestDatabase {
             admin,
             new Requests.Vehicle(key(), Requests.VehicleType.VAN, BigDecimal.valueOf(capacity)));
     return catalog.driver(admin, new Requests.Driver("Test driver", null, vehicle, 20, 85));
+  }
+
+  @Test
+  void secondDeliveryCanUseSpareDriverWhileFirstAssignmentIsUncommitted() throws Exception {
+    db.update("UPDATE driver SET status='OFFLINE' WHERE workload=0");
+    driver(10);
+    driver(10);
+    UUID first = order(2), second = order(2);
+    packed(first);
+    packed(second);
+    var assigned = new CountDownLatch(1);
+    var release = new CountDownLatch(1);
+    try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
+      var a =
+          pool.submit(
+              () ->
+                  new org.springframework.transaction.support.TransactionTemplate(
+                          transactionManager)
+                      .execute(
+                          status -> {
+                            UUID shipment = orders.assign(admin, first, key());
+                            assigned.countDown();
+                            try {
+                              assertTrue(release.await(15, TimeUnit.SECONDS));
+                            } catch (InterruptedException e) {
+                              throw new RuntimeException(e);
+                            }
+                            return shipment;
+                          }));
+      try {
+        assertTrue(assigned.await(15, TimeUnit.SECONDS));
+        UUID b = orders.assign(admin, second, key());
+        release.countDown();
+        UUID aId = a.get(15, TimeUnit.SECONDS);
+        assertNotEquals(
+            db.one("SELECT driver_id FROM shipment WHERE id=?", aId).get("driver_id"),
+            db.one("SELECT driver_id FROM shipment WHERE id=?", b).get("driver_id"));
+      } finally {
+        release.countDown();
+      }
+    }
+  }
+
+  @Test
+  void unavailableResourcesAndInvalidReferencesFailWithoutShipment() {
+    db.update("UPDATE driver SET status='OFFLINE' WHERE workload=0");
+    UUID id = order(2);
+    packed(id);
+    assertEquals(
+        "NO_DRIVER", assertThrows(ApiException.class, () -> orders.assign(admin, id, key())).code);
+    UUID driverId = driver(10);
+    UUID vehicleId =
+        Store.id(db.one("SELECT vehicle_id FROM driver WHERE id=?", driverId), "vehicle_id");
+    catalog.vehicleAvailability(admin, vehicleId, Requests.VehicleStatus.MAINTENANCE);
+    assertEquals(
+        "NO_DRIVER", assertThrows(ApiException.class, () -> orders.assign(admin, id, key())).code);
+    catalog.vehicleAvailability(admin, vehicleId, Requests.VehicleStatus.AVAILABLE);
+    catalog.driverAvailability(admin, driverId, Requests.DriverStatus.ON_LEAVE);
+    assertEquals(
+        "NO_DRIVER", assertThrows(ApiException.class, () -> orders.assign(admin, id, key())).code);
+    assertTrue(db.rows("SELECT id FROM shipment WHERE order_id=?", id).isEmpty());
+    assertEquals(
+        404,
+        assertThrows(
+                ApiException.class,
+                () ->
+                    catalog.driver(
+                        admin, new Requests.Driver("Invalid", null, UUID.randomUUID(), 20, 85)))
+            .status);
+  }
+
+  @Test
+  void warehouseCannotMoveReservedOrdersAndDriverAccountsMustBeActive() {
+    order(1);
+    assertEquals(
+        "WAREHOUSE_IN_USE",
+        assertThrows(
+                ApiException.class,
+                () ->
+                    catalog.updateWarehouse(
+                        admin,
+                        warehouse,
+                        new Requests.Warehouse(
+                            "Moved", "Elsewhere", 21, 86, 100, Requests.WarehouseStatus.ACTIVE)))
+            .code);
+    UUID vehicle =
+        catalog.vehicle(
+            admin, new Requests.Vehicle(key(), Requests.VehicleType.VAN, BigDecimal.TEN));
+    db.update("UPDATE app_user SET role='DRIVER',active=false WHERE id=?", customer.id());
+    assertEquals(
+        "INVALID_DRIVER_ACCOUNT",
+        assertThrows(
+                ApiException.class,
+                () ->
+                    catalog.driver(
+                        admin, new Requests.Driver("Inactive", customer.id(), vehicle, 20, 85)))
+            .code);
   }
 
   @Test

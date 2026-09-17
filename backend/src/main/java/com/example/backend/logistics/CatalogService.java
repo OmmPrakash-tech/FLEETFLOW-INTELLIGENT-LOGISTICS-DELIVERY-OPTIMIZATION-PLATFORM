@@ -87,9 +87,12 @@ public class CatalogService {
   public UUID driver(Actor actor, Requests.Driver r) {
     actor.requireStaff();
     new Optimization.Point(r.latitude(), r.longitude());
-    if (r.userId() != null
-        && !db.one("SELECT role FROM app_user WHERE id=?", r.userId()).get("role").equals("DRIVER"))
-      throw ApiException.conflict("INVALID_DRIVER_ACCOUNT", "User must have DRIVER role");
+    if (r.userId() != null) {
+      var user = db.one("SELECT role,active FROM app_user WHERE id=? FOR UPDATE", r.userId());
+      if (!user.get("role").equals("DRIVER") || !Boolean.TRUE.equals(user.get("active")))
+        throw ApiException.conflict("INVALID_DRIVER_ACCOUNT", "User must be an active DRIVER");
+    }
+    db.one("SELECT id FROM vehicle WHERE id=?", r.vehicleId());
     UUID id = UUID.randomUUID();
     db.update(
         "INSERT INTO driver(id,user_id,name,vehicle_id,latitude,longitude,status) VALUES(?,?,?,?,?,?,'AVAILABLE')",
@@ -144,6 +147,12 @@ public class CatalogService {
     actor.requireStaff();
     new Optimization.Point(r.latitude(), r.longitude());
     var w = db.one("SELECT * FROM warehouse WHERE id=? FOR UPDATE", id);
+    if (Store.integer(w, "current_load") > 0
+        && (Double.compare(Store.number(w, "latitude"), r.latitude()) != 0
+            || Double.compare(Store.number(w, "longitude"), r.longitude()) != 0
+            || !w.get("address").equals(r.address())))
+      throw ApiException.conflict(
+          "WAREHOUSE_IN_USE", "Finish active orders before relocating the warehouse");
     if (r.capacity() < Store.integer(w, "current_load"))
       throw ApiException.conflict(
           "CAPACITY_IN_USE", "Capacity cannot be less than current workload");

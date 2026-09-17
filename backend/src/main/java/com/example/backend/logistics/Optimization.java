@@ -17,7 +17,8 @@ public final class Optimization {
 
   public record Edge(String to, double km) {
     public Edge {
-      if (!Double.isFinite(km) || km < 0) throw new IllegalArgumentException("Invalid weight");
+      if (to == null || to.isBlank() || !Double.isFinite(km) || km < 0)
+        throw new IllegalArgumentException("Invalid edge");
     }
   }
 
@@ -36,7 +37,8 @@ public final class Optimization {
 
   public static double warehouseScore(
       double km, int load, int capacity, int priority, int slaHours) {
-    if (km < 0
+    if (!Double.isFinite(km)
+        || km < 0
         || capacity <= 0
         || load < 0
         || load >= capacity
@@ -50,8 +52,16 @@ public final class Optimization {
 
   public static double driverScore(
       double km, double weight, double capacity, int workload, int priority, int slaHours) {
-    if (km < 0 || weight <= 0 || capacity < weight || workload != 0)
-      return Double.POSITIVE_INFINITY;
+    if (!Double.isFinite(km)
+        || !Double.isFinite(weight)
+        || !Double.isFinite(capacity)
+        || km < 0
+        || weight <= 0
+        || capacity < weight
+        || workload != 0
+        || priority < 1
+        || priority > 3
+        || slaHours < 1) return Double.POSITIVE_INFINITY;
     return 0.6 * Math.min(km / 100, 1)
         + 0.15 * (1 - weight / capacity)
         + 0.25 * Math.min(km / 35 / slaHours, 1) * (priority / 3.0);
@@ -65,12 +75,26 @@ public final class Optimization {
         || speed <= 0
         || stops < 0
         || conditionFactor < 1) throw new IllegalArgumentException("Invalid ETA input");
-    return (int) Math.ceil(km / speed * 60 * conditionFactor + stops * 5);
+    double minutes = Math.ceil(km / speed * 60 * conditionFactor + stops * 5.0);
+    if (!Double.isFinite(minutes) || minutes > Integer.MAX_VALUE)
+      throw new IllegalArgumentException("ETA exceeds supported range");
+    return (int) minutes;
   }
 
   public static Path dijkstra(Map<String, List<Edge>> graph, String start, String end) {
-    if (!graph.containsKey(start) || !graph.containsKey(end))
-      throw new IllegalArgumentException("Unknown node");
+    if (graph == null
+        || start == null
+        || end == null
+        || !graph.containsKey(start)
+        || !graph.containsKey(end)) throw new IllegalArgumentException("Unknown node");
+    // Validate the entire input, including components not reached by the search.
+    for (var node : graph.entrySet()) {
+      if (node.getKey() == null || node.getKey().isBlank() || node.getValue() == null)
+        throw new IllegalArgumentException("Invalid graph node");
+      for (var edge : node.getValue())
+        if (edge == null || !graph.containsKey(edge.to()))
+          throw new IllegalArgumentException("Unknown edge endpoint");
+    }
     record Entry(String node, double distance) {}
     var q =
         new PriorityQueue<Entry>(
@@ -88,6 +112,8 @@ public final class Optimization {
         if (!graph.containsKey(edge.to))
           throw new IllegalArgumentException("Unknown edge endpoint");
         double candidate = current.distance + edge.km;
+        if (!Double.isFinite(candidate))
+          throw new IllegalArgumentException("Path distance overflow");
         if (candidate < distances.getOrDefault(edge.to, Double.POSITIVE_INFINITY)) {
           distances.put(edge.to, candidate);
           previous.put(edge.to, current.node);
@@ -104,6 +130,8 @@ public final class Optimization {
   }
 
   public static List<Integer> nearestNeighbor(Point start, List<Point> stops) {
+    if (start == null || stops == null || stops.stream().anyMatch(Objects::isNull))
+      throw new IllegalArgumentException("Invalid route locations");
     var remaining = new TreeSet<Integer>();
     for (int i = 0; i < stops.size(); i++) remaining.add(i);
     var route = new ArrayList<Integer>();

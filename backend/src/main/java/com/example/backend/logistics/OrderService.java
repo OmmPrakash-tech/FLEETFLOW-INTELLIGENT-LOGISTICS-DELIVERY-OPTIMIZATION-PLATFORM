@@ -183,11 +183,11 @@ public class OrderService {
             "weight");
     var drivers =
         db.rows(
-            "SELECT d.*,v.capacity_kg,v.type FROM driver d JOIN vehicle v ON v.id=d.vehicle_id LEFT JOIN app_user u ON u.id=d.user_id WHERE d.status='AVAILABLE' AND d.workload=0 AND v.status='AVAILABLE' AND v.capacity_kg>=? AND (d.user_id IS NULL OR (u.active=true AND u.role='DRIVER')) ORDER BY d.id FOR UPDATE OF d,v SKIP LOCKED",
+            "SELECT d.*,v.capacity_kg,v.type FROM driver d JOIN vehicle v ON v.id=d.vehicle_id LEFT JOIN app_user u ON u.id=d.user_id WHERE d.status='AVAILABLE' AND d.workload=0 AND v.status='AVAILABLE' AND v.capacity_kg>=? AND (d.user_id IS NULL OR (u.active=true AND u.role='DRIVER')) ORDER BY d.id",
             weight);
-    var best =
+    var ranked =
         drivers.stream()
-            .min(
+            .sorted(
                 Comparator.<Map<String, Object>>comparingDouble(
                         d ->
                             Optimization.driverScore(
@@ -198,10 +198,24 @@ public class OrderService {
                                 integer(order, "priority"),
                                 integer(order, "sla_hours")))
                     .thenComparing(d -> d.get("id").toString()))
-            .orElseThrow(
-                () ->
-                    ApiException.conflict(
-                        "NO_DRIVER", "No available driver with sufficient vehicle capacity"));
+            .toList();
+    Map<String, Object> best = null;
+    for (var candidate : ranked) {
+      // Lock and recheck one candidate, leaving other feasible drivers available to concurrent
+      // orders.
+      var locked =
+          db.rows(
+              "SELECT d.*,v.capacity_kg,v.type FROM driver d JOIN vehicle v ON v.id=d.vehicle_id LEFT JOIN app_user u ON u.id=d.user_id WHERE d.id=? AND d.status='AVAILABLE' AND d.workload=0 AND v.status='AVAILABLE' AND v.capacity_kg>=? AND (d.user_id IS NULL OR (u.active=true AND u.role='DRIVER')) FOR UPDATE OF d,v SKIP LOCKED",
+              candidate.get("id"),
+              weight);
+      if (!locked.isEmpty()) {
+        best = locked.getFirst();
+        break;
+      }
+    }
+    if (best == null)
+      throw ApiException.conflict(
+          "NO_DRIVER", "No available driver with sufficient vehicle capacity");
     UUID driverId = id(best, "id"), shipmentId = UUID.randomUUID(), routeId = UUID.randomUUID();
     double km = distances.distance(point(warehouse), point(order));
     var graph =

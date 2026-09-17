@@ -34,13 +34,15 @@ public class TrackingController {
   }
 
   @GetMapping(value = "/{id}/stream", produces = "text/event-stream")
-  public SseEmitter stream(@PathVariable UUID id) {
+  public SseEmitter stream(@PathVariable UUID id, jakarta.servlet.http.HttpServletRequest request) {
     var actor = Actor.current();
     tracking.snapshot(actor, id);
+    var initial = db.one("SELECT token_version FROM app_user WHERE id=?", actor.id());
+    if (!initial.get("token_version").equals(request.getAttribute("authenticatedTokenVersion")))
+      throw new ApiException(401, "TOKEN_REVOKED", "Sign in again");
     if (!connections.tryAcquire())
       throw new ApiException(
           503, "TRACKING_CAPACITY", "Too many tracking connections; retry later");
-    var initial = db.one("SELECT token_version FROM app_user WHERE id=?", actor.id());
     var emitter = new SseEmitter(60000L);
     var closed = new java.util.concurrent.atomic.AtomicBoolean();
     var ref = new java.util.concurrent.atomic.AtomicReference<ScheduledFuture<?>>();

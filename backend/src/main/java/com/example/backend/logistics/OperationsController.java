@@ -244,7 +244,8 @@ public class OperationsController {
 
   @DeleteMapping("/addresses/{id}")
   public void removeAddress(@PathVariable UUID id) {
-    db.update("DELETE FROM address WHERE id=? AND user_id=?", id, Actor.current().id());
+    if (db.update("DELETE FROM address WHERE id=? AND user_id=?", id, Actor.current().id()) == 0)
+      throw new ApiException(404, "NOT_FOUND", "Address not found");
   }
 
   @GetMapping("/alerts")
@@ -260,7 +261,8 @@ public class OperationsController {
   @PostMapping("/alerts/{id}/resolve")
   public void resolve(@PathVariable long id) {
     Actor.current().requireStaff();
-    db.update("UPDATE alert SET resolved=true WHERE id=?", id);
+    if (db.update("UPDATE alert SET resolved=true WHERE id=?", id) == 0)
+      throw new ApiException(404, "NOT_FOUND", "Alert not found");
   }
 
   @GetMapping("/audit")

@@ -33,7 +33,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     if (buckets.size() > 10000) buckets.entrySet().removeIf(e -> e.getValue().minute() < minute);
     String key = req.getRemoteAddr() + ":" + auth;
     if (buckets.size() >= 10000 && !buckets.containsKey(key)) {
-      SecurityConfig.reject(res, 429, "RATE_LIMITED");
+      SecurityConfig.reject(req, res, 429, "RATE_LIMITED");
       return;
     }
     Bucket b =
@@ -42,7 +42,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             (k, v) -> new Bucket(minute, v == null || v.minute() != minute ? 1 : v.count() + 1));
     if (b.count() > (auth ? 30 : 600)) {
       res.setHeader("Retry-After", "60");
-      SecurityConfig.reject(res, 429, "RATE_LIMITED");
+      SecurityConfig.reject(req, res, 429, "RATE_LIMITED");
       return;
     }
     chain.doFilter(req, res);

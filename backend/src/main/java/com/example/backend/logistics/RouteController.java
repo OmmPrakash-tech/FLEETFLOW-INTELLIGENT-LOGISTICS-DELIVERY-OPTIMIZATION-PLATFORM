@@ -1,5 +1,6 @@
 package com.example.backend.logistics;
 
+import com.example.backend.logistics.Requests.Position;
 import com.example.backend.security.Actor;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
@@ -11,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 public class RouteController {
   public record Plan(
       @NotNull @Valid Requests.Position start,
-      @NotEmpty @Size(max = 50) @Valid List<Requests.Position> stops,
+      @NotEmpty @Size(max = 50) @Valid List<@NotNull Position> stops,
       @Min(1) @Max(120) double speedKmh) {}
 
   public record Graph(

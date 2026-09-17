@@ -1,5 +1,6 @@
 package com.example.backend.security;
 
+import com.example.backend.common.ApiErrors;
 import com.example.backend.common.Store;
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
@@ -52,6 +53,7 @@ public class SecurityConfig {
       throws Exception {
     var cors = new CorsConfiguration();
     cors.setAllowedOrigins(List.of(origin));
+    cors.setExposedHeaders(List.of("X-Request-ID"));
     cors.setAllowedMethods(List.of("GET", "POST", "PATCH", "DELETE", "OPTIONS"));
     cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "Idempotency-Key"));
     var source = new UrlBasedCorsConfigurationSource();
@@ -80,8 +82,8 @@ public class SecurityConfig {
                 .authenticated());
     http.exceptionHandling(
         e ->
-            e.authenticationEntryPoint((r, s, x) -> reject(s, 401, "UNAUTHORIZED"))
-                .accessDeniedHandler((r, s, x) -> reject(s, 403, "FORBIDDEN")));
+            e.authenticationEntryPoint((r, s, x) -> reject(r, s, 401, "UNAUTHORIZED"))
+                .accessDeniedHandler((r, s, x) -> reject(r, s, 403, "FORBIDDEN")));
     http.addFilterBefore(
         new OncePerRequestFilter() {
           @Override
@@ -92,25 +94,32 @@ public class SecurityConfig {
             if (header != null && header.startsWith("Bearer ")) {
               try {
                 var jwt = decoder.decode(header.substring(7));
+                Object version = jwt.getClaim("version");
+                if (jwt.getSubject() == null
+                    || !(version instanceof Number number)
+                    || !Double.isFinite(number.doubleValue())
+                    || number.doubleValue() != number.intValue()
+                    || number.intValue() < 0)
+                  throw new IllegalArgumentException("Invalid token claims");
+                req.setAttribute("authenticatedTokenVersion", number.intValue());
                 var rows =
                     store.rows(
                         "SELECT id,role,active,force_reset,token_version FROM app_user WHERE id=?",
                         UUID.fromString(jwt.getSubject()));
                 if (rows.isEmpty()) {
-                  reject(res, 401, "UNAUTHORIZED");
+                  reject(req, res, 401, "UNAUTHORIZED");
                   return;
                 }
                 var user = rows.getFirst();
                 if (!Boolean.TRUE.equals(user.get("active"))
-                    || Store.integer(user, "token_version")
-                        != ((Number) jwt.getClaim("version")).intValue()) {
-                  reject(res, 401, "TOKEN_REVOKED");
+                    || Store.integer(user, "token_version") != number.intValue()) {
+                  reject(req, res, 401, "TOKEN_REVOKED");
                   return;
                 }
                 if (Boolean.TRUE.equals(user.get("force_reset"))
                     && !Set.of("/api/auth/password", "/api/auth/me", "/api/auth/logout")
                         .contains(req.getRequestURI())) {
-                  reject(res, 403, "PASSWORD_RESET_REQUIRED");
+                  reject(req, res, 403, "PASSWORD_RESET_REQUIRED");
                   return;
                 }
                 String role = user.get("role").toString();
@@ -121,10 +130,10 @@ public class SecurityConfig {
                         List.of(new SimpleGrantedAuthority("ROLE_" + role)));
                 SecurityContextHolder.getContext().setAuthentication(auth);
               } catch (JwtException | IllegalArgumentException e) {
-                reject(res, 401, "INVALID_TOKEN");
+                reject(req, res, 401, "INVALID_TOKEN");
                 return;
               } catch (org.springframework.dao.DataAccessException e) {
-                reject(res, 503, "DATABASE_UNAVAILABLE");
+                reject(req, res, 503, "DATABASE_UNAVAILABLE");
                 return;
               }
             }
@@ -135,17 +144,8 @@ public class SecurityConfig {
     return http.build();
   }
 
-  static void reject(HttpServletResponse res, int status, String code) throws IOException {
-    res.setStatus(status);
-    res.setContentType("application/json");
-    res.getWriter()
-        .write(
-            "{\"status\":"
-                + status
-                + ",\"code\":\""
-                + code
-                + "\",\"message\":\""
-                + code.replace('_', ' ')
-                + "\"}");
+  static void reject(HttpServletRequest req, HttpServletResponse res, int status, String code)
+      throws IOException {
+    ApiErrors.write(req, res, status, code);
   }
 }
